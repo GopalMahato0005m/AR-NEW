@@ -276,7 +276,7 @@ function askQuestion(question, options, correctIndex){
 document.getElementById('btnPlay').addEventListener('click', async () => {
   screenStart.classList.add('hidden');
   skipLoading.classList.remove('hidden');
-  await showModel('models/01_cow_outside.glb', { scale:0.9, x:0, y:0, z:0 });
+  await showModel('01_cow_outside.glb', { scale:0.9, x:0, y:0, z:0 });
   skipLoading.classList.add('hidden');
   // enter adjust mode
   adjustHint.classList.remove('hidden');
@@ -333,7 +333,7 @@ async function runStory(){
   );
 
   // CLIP 2: cow looks normal/bloated, then zoom into inside view
-  await showModel('models/02_cow_bloated.glb', { scale:0.9 });
+  await showModel('02_cow_bloated.glb', { scale:0.9 });
   showCaption("Looks Fine. Isn't.", "From the outside, the cow looks normal — maybe even well-fed. But something is wrong beneath the surface.");
   await waitForContinue();
   hideCaption();
@@ -350,7 +350,7 @@ async function runStory(){
     }
     requestAnimationFrame(step);
   });
-  await showModel('models/03_stomach_inside.glb', { scale:1.0 });
+  await showModel('03_stomach_inside.glb', { scale:1.0 });
   showCaption("Inside the Body", "Plastic and food waste tangle together inside the stomach — undigested, blocking nutrition, and slowly leaching toxins.");
   await waitForContinue();
   hideCaption();
@@ -369,7 +369,7 @@ async function runStory(){
   });
 
   // CLIP 3: cow lying down, sick
-  await showModel('models/04_cow_sick.glb', { scale:0.9 });
+  await showModel('04_cow_sick.glb', { scale:0.9 });
   showCaption("A Silent Suffering", "Weeks later, the cow is too weak to stand. It ate every day — but was never truly fed.");
   await waitForContinue();
   hideCaption();
