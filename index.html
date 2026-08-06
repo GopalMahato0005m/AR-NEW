@@ -16,6 +16,7 @@
     text-align:center; padding:24px; z-index:5; background:rgba(11,15,12,0.55); backdrop-filter:blur(2px);
   }
   .screen.hidden{ display:none; }
+  .hidden{ display:none !important; }
   .screen h1{ font-size:1.4rem; margin:0 0 10px; }
   .screen p.sub{ font-size:0.9rem; opacity:0.85; max-width:420px; margin:0 0 26px; line-height:1.5;}
 
@@ -70,6 +71,10 @@
   .qOptions button.wrong{ background:rgba(176,58,46,0.55); border-color:var(--danger); }
 
   #skipLoading{ position:fixed; top:16px; left:16px; z-index:8; font-size:0.75rem; opacity:0.6; }
+  #errorBanner{
+    position:fixed; top:16px; left:16px; right:16px; z-index:20; background:var(--danger); color:white;
+    padding:12px 16px; border-radius:10px; font-size:0.8rem; line-height:1.5;
+  }
 
   .loadingSpinner{
     width:34px; height:34px; border:3px solid rgba(255,255,255,0.25); border-top-color:var(--safe);
@@ -124,6 +129,7 @@
 </div>
 
 <div id="skipLoading" class="hidden">Loading 3D scene…</div>
+<div id="errorBanner" class="hidden"></div>
 
 <script type="importmap">
 { "imports": {
@@ -186,8 +192,23 @@ animateLoop();
 // ---------------- Model loading helpers ----------------
 const loader = new GLTFLoader();
 const cache = {};
+const errorBanner = document.getElementById('errorBanner');
+function showFatalError(msg){
+  console.error(msg);
+  errorBanner.textContent = "⚠️ " + msg;
+  errorBanner.classList.remove('hidden');
+  document.getElementById('skipLoading').classList.add('hidden');
+}
 async function getModel(path){
   if (cache[path]) return cache[path].clone(true);
+  try {
+    const res = await fetch(path, { method:'HEAD' });
+    if (!res.ok){
+      throw new Error(`Server returned ${res.status} for "${path}". Check the file exists at this exact path/case on your host.`);
+    }
+  } catch(networkErr){
+    throw new Error(`Could not reach "${path}" (${networkErr.message}). This usually means the models folder isn't at the same location as this HTML file, or the filename/case doesn't match.`);
+  }
   const gltf = await loader.loadAsync(path);
   cache[path] = gltf.scene;
   return gltf.scene.clone(true);
@@ -196,7 +217,13 @@ async function getModel(path){
 let currentModel = null;
 async function showModel(path, opts={}){
   if (currentModel) scene.remove(currentModel);
-  const m = await getModel(path);
+  let m;
+  try{
+    m = await getModel(path);
+  }catch(err){
+    showFatalError(err.message);
+    throw err;
+  }
   const scale = opts.scale ?? 0.9;
   m.scale.set(scale, scale, scale);
   m.position.set(opts.x ?? 0, opts.y ?? 0, opts.z ?? 0);
@@ -276,7 +303,11 @@ function askQuestion(question, options, correctIndex){
 document.getElementById('btnPlay').addEventListener('click', async () => {
   screenStart.classList.add('hidden');
   skipLoading.classList.remove('hidden');
-  await showModel('01_cow_outside.glb', { scale:0.9, x:0, y:0, z:0 });
+  try{
+    await showModel('models/01_cow_outside.glb', { scale:0.9, x:0, y:0, z:0 });
+  }catch(err){
+    return; // error banner already shown by showModel
+  }
   skipLoading.classList.add('hidden');
   // enter adjust mode
   adjustHint.classList.remove('hidden');
@@ -333,7 +364,7 @@ async function runStory(){
   );
 
   // CLIP 2: cow looks normal/bloated, then zoom into inside view
-  await showModel('02_cow_bloated.glb', { scale:0.9 });
+  await showModel('models/02_cow_bloated.glb', { scale:0.9 });
   showCaption("Looks Fine. Isn't.", "From the outside, the cow looks normal — maybe even well-fed. But something is wrong beneath the surface.");
   await waitForContinue();
   hideCaption();
@@ -350,7 +381,7 @@ async function runStory(){
     }
     requestAnimationFrame(step);
   });
-  await showModel('03_stomach_inside.glb', { scale:1.0 });
+  await showModel('models/03_stomach_inside.glb', { scale:1.0 });
   showCaption("Inside the Body", "Plastic and food waste tangle together inside the stomach — undigested, blocking nutrition, and slowly leaching toxins.");
   await waitForContinue();
   hideCaption();
@@ -369,7 +400,7 @@ async function runStory(){
   });
 
   // CLIP 3: cow lying down, sick
-  await showModel('04_cow_sick.glb', { scale:0.9 });
+  await showModel('models/04_cow_sick.glb', { scale:0.9 });
   showCaption("A Silent Suffering", "Weeks later, the cow is too weak to stand. It ate every day — but was never truly fed.");
   await waitForContinue();
   hideCaption();
