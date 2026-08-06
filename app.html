@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>The Hidden Cost of a Plastic Bag</title>
+<style>
+  :root{ --brown:#7a4f2b; --cream:#f6efe4; --danger:#b03a2e; --safe:#2e7d32; --dark:#2b2b2b; }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{ margin:0; height:100%; overflow:hidden; font-family:'Segoe UI',system-ui,sans-serif; background:#0b0f0c; color:white; }
+  #canvas-wrap{ position:fixed; inset:0; }
+  canvas{ display:block; touch-action:none; }
+
+  .screen{
+    position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:24px; z-index:5; background:rgba(11,15,12,0.55); backdrop-filter:blur(2px);
+  }
+  .screen.hidden{ display:none; }
+  .screen h1{ font-size:1.4rem; margin:0 0 10px; }
+  .screen p.sub{ font-size:0.9rem; opacity:0.85; max-width:420px; margin:0 0 26px; line-height:1.5;}
+
+  button.primary{
+    background:var(--safe); color:white; border:none; padding:16px 40px; border-radius:30px;
+    font-size:1.05rem; font-weight:700; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.35);
+  }
+  button.secondary{
+    background:rgba(255,255,255,0.12); color:white; border:1px solid rgba(255,255,255,0.3);
+    padding:12px 28px; border-radius:24px; font-size:0.9rem; margin-top:14px; cursor:pointer;
+  }
+
+  /* Adjust / zoom screen */
+  #adjustHint{
+    position:fixed; top:22px; left:0; right:0; text-align:center; z-index:6; pointer-events:none;
+  }
+  #adjustHint span{ background:rgba(0,0,0,0.55); padding:8px 16px; border-radius:20px; font-size:0.82rem; }
+  #zoomControls{
+    position:fixed; right:16px; top:50%; transform:translateY(-50%); z-index:6;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  #zoomControls button{
+    width:46px; height:46px; border-radius:50%; border:none; background:rgba(0,0,0,0.55); color:white;
+    font-size:1.3rem; font-weight:700;
+  }
+  #continueBar{
+    position:fixed; bottom:24px; left:0; right:0; display:flex; justify-content:center; z-index:6;
+  }
+  #continueBar.hidden{ display:none; }
+
+  /* Caption / message overlay during clips */
+  #captionCard{
+    position:fixed; left:14px; right:14px; bottom:100px; z-index:6; background:rgba(0,0,0,0.72);
+    padding:16px 18px; border-radius:14px; backdrop-filter:blur(4px); display:none;
+  }
+  #captionCard.show{ display:block; }
+  #captionCard h3{ margin:0 0 6px; font-size:1rem; color:#ffe1b0; }
+  #captionCard p{ margin:0; font-size:0.88rem; line-height:1.5; }
+
+  #questionCard{
+    position:fixed; left:14px; right:14px; bottom:100px; z-index:7; background:rgba(0,0,0,0.85);
+    padding:18px; border-radius:14px; display:none;
+  }
+  #questionCard.show{ display:block; }
+  #questionCard p{ margin:0 0 12px; font-size:0.92rem; }
+  .qOptions{ display:flex; flex-direction:column; gap:8px; }
+  .qOptions button{
+    background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3); color:white;
+    padding:11px; border-radius:10px; font-size:0.86rem; text-align:left;
+  }
+  .qOptions button.correct{ background:rgba(46,125,50,0.55); border-color:var(--safe); }
+  .qOptions button.wrong{ background:rgba(176,58,46,0.55); border-color:var(--danger); }
+
+  #skipLoading{ position:fixed; top:16px; left:16px; z-index:8; font-size:0.75rem; opacity:0.6; }
+
+  .loadingSpinner{
+    width:34px; height:34px; border:3px solid rgba(255,255,255,0.25); border-top-color:var(--safe);
+    border-radius:50%; animation:spin 0.9s linear infinite; margin-bottom:16px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<!-- SCREEN 0: Landing / Play -->
+<div class="screen" id="screenStart">
+  <h1>🐄 The Hidden Cost of a Plastic Bag</h1>
+  <p class="sub">An interactive story about stray animals, food waste, and the plastic we don't think twice about throwing away.</p>
+  <button class="primary" id="btnPlay">▶ Play</button>
+</div>
+
+<!-- Adjust / framing screen -->
+<div id="adjustHint" class="hidden"><span>Pinch or use +/- to zoom · Drag to rotate</span></div>
+<div id="zoomControls" class="hidden">
+  <button id="zoomIn">+</button>
+  <button id="zoomOut">−</button>
+</div>
+<div id="continueBar" class="hidden">
+  <button class="primary" id="btnContinueAdjust">Continue ▶</button>
+</div>
+
+<!-- Caption overlay for clips -->
+<div id="captionCard">
+  <h3 id="capTitle"></h3>
+  <p id="capText"></p>
+</div>
+
+<!-- Question overlay -->
+<div id="questionCard">
+  <p id="qText"></p>
+  <div class="qOptions" id="qOptions"></div>
+</div>
+
+<!-- Continue button shown after each message -->
+<div id="continueBar2" class="hidden" style="position:fixed; bottom:24px; left:0; right:0; display:flex; justify-content:center; z-index:6;">
+  <button class="primary" id="btnContinueClip">Continue ▶</button>
+</div>
+
+<!-- Final screen -->
+<div class="screen hidden" id="screenFinal">
+  <h1>Now you know.</h1>
+  <p class="sub" id="finalText"></p>
+  <button class="primary" id="btnRestart">⟲ Restart</button>
+</div>
+
+<div id="skipLoading" class="hidden">Loading 3D scene…</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------------- Three.js base setup ----------------
+const wrap = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+wrap.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe9d8);
+// simple ground
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(6, 32),
+  new THREE.MeshStandardMaterial({ color:0xcfc3a5, roughness:1 })
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(0, 1.6, 4.2);
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x554433, 1.1);
+scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+dir.position.set(2,4,2);
+scene.add(dir);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+controls.minDistance = 1.5;
+controls.maxDistance = 8;
+controls.target.set(0, 0.8, 0);
+controls.update();
+controls.enabled = false; // enabled only during adjust screen
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animateLoop(){
+  requestAnimationFrame(animateLoop);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animateLoop();
+
+// ---------------- Model loading helpers ----------------
+const loader = new GLTFLoader();
+const cache = {};
+async function getModel(path){
+  if (cache[path]) return cache[path].clone(true);
+  const gltf = await loader.loadAsync(path);
+  cache[path] = gltf.scene;
+  return gltf.scene.clone(true);
+}
+
+let currentModel = null;
+async function showModel(path, opts={}){
+  if (currentModel) scene.remove(currentModel);
+  const m = await getModel(path);
+  const scale = opts.scale ?? 0.9;
+  m.scale.set(scale, scale, scale);
+  m.position.set(opts.x ?? 0, opts.y ?? 0, opts.z ?? 0);
+  scene.add(m);
+  currentModel = m;
+  return m;
+}
+
+function tween(obj, propPath, from, to, duration, ease=(t)=>t, onDone){
+  const start = performance.now();
+  function step(now){
+    const t = Math.min(1, (now-start)/duration);
+    const v = from + (to-from)*ease(t);
+    const parts = propPath.split('.');
+    let target = obj;
+    for(let i=0;i<parts.length-1;i++) target = target[parts[i]];
+    target[parts[parts.length-1]] = v;
+    if (t < 1) requestAnimationFrame(step); else if(onDone) onDone();
+  }
+  requestAnimationFrame(step);
+}
+const easeInOut = t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+
+// ---------------- Screens / flow control ----------------
+const screenStart = document.getElementById('screenStart');
+const screenFinal = document.getElementById('screenFinal');
+const adjustHint = document.getElementById('adjustHint');
+const zoomControls = document.getElementById('zoomControls');
+const continueBar = document.getElementById('continueBar');
+const captionCard = document.getElementById('captionCard');
+const capTitle = document.getElementById('capTitle');
+const capText = document.getElementById('capText');
+const continueBar2 = document.getElementById('continueBar2');
+const btnContinueClip = document.getElementById('btnContinueClip');
+const questionCard = document.getElementById('questionCard');
+const qText = document.getElementById('qText');
+const qOptions = document.getElementById('qOptions');
+const skipLoading = document.getElementById('skipLoading');
+
+function showCaption(title, text){
+  capTitle.textContent = title;
+  capText.textContent = text;
+  captionCard.classList.add('show');
+}
+function hideCaption(){ captionCard.classList.remove('show'); }
+
+function waitForContinue(){
+  return new Promise((resolve) => {
+    continueBar2.classList.remove('hidden');
+    btnContinueClip.onclick = () => {
+      continueBar2.classList.add('hidden');
+      resolve();
+    };
+  });
+}
+
+function askQuestion(question, options, correctIndex){
+  return new Promise((resolve) => {
+    qText.textContent = question;
+    qOptions.innerHTML = '';
+    options.forEach((opt, i) => {
+      const b = document.createElement('button');
+      b.textContent = opt;
+      b.onclick = () => {
+        [...qOptions.children].forEach(c => c.disabled = true);
+        b.classList.add(i === correctIndex ? 'correct' : 'wrong');
+        if (i !== correctIndex) qOptions.children[correctIndex].classList.add('correct');
+        setTimeout(() => { questionCard.classList.remove('show'); resolve(); }, 1300);
+      };
+      qOptions.appendChild(b);
+    });
+    questionCard.classList.add('show');
+  });
+}
+
+// ---------------- STEP 1: Play button ----------------
+document.getElementById('btnPlay').addEventListener('click', async () => {
+  screenStart.classList.add('hidden');
+  skipLoading.classList.remove('hidden');
+  await showModel('models/01_cow_outside.glb', { scale:0.9, x:0, y:0, z:0 });
+  skipLoading.classList.add('hidden');
+  // enter adjust mode
+  adjustHint.classList.remove('hidden');
+  zoomControls.classList.remove('hidden');
+  continueBar.classList.remove('hidden');
+  controls.enabled = true;
+});
+
+document.getElementById('zoomIn').addEventListener('click', () => {
+  camera.position.lerp(controls.target, 0.15);
+});
+document.getElementById('zoomOut').addEventListener('click', () => {
+  const dirVec = camera.position.clone().sub(controls.target).normalize();
+  camera.position.add(dirVec.multiplyScalar(0.6));
+});
+
+document.getElementById('btnContinueAdjust').addEventListener('click', async () => {
+  adjustHint.classList.add('hidden');
+  zoomControls.classList.add('hidden');
+  continueBar.classList.add('hidden');
+  controls.enabled = false;
+  runStory();
+});
+
+// ---------------- STORY SEQUENCE ----------------
+async function runStory(){
+  // CLIP 1: cow walks in from the side toward the "waste area" and eats
+  currentModel.position.set(-2.5, 0, 0);
+  showCaption("A Familiar Sight", "A stray cow approaches the bin, searching for food among the waste.");
+  await new Promise(res => {
+    tween(currentModel, 'position.x', -2.5, 0, 2200, easeInOut, res);
+  });
+  // little "eating" bob animation
+  await new Promise(res => {
+    let count = 0;
+    function bob(){
+      tween(currentModel, 'position.y', 0, -0.06, 220, easeInOut, () => {
+        tween(currentModel, 'position.y', -0.06, 0, 220, easeInOut, () => {
+          count++;
+          if (count < 3) bob(); else res();
+        });
+      });
+    }
+    bob();
+  });
+  showCaption("The Struggle", "The food is knotted inside a plastic bag. Unable to untie it, the cow eats the food — and the plastic — together.");
+  await waitForContinue();
+  hideCaption();
+
+  await askQuestion(
+    "What do you think happens to the plastic once it's eaten?",
+    ["It passes through naturally", "It stays trapped inside the stomach", "The animal coughs it back up"],
+    1
+  );
+
+  // CLIP 2: cow looks normal/bloated, then zoom into inside view
+  await showModel('models/02_cow_bloated.glb', { scale:0.9 });
+  showCaption("Looks Fine. Isn't.", "From the outside, the cow looks normal — maybe even well-fed. But something is wrong beneath the surface.");
+  await waitForContinue();
+  hideCaption();
+
+  // dolly the camera in to simulate "zooming into internal structure"
+  await new Promise(res => {
+    const startPos = camera.position.clone();
+    const targetPos = new THREE.Vector3(0, 0.9, 1.6);
+    let t0 = performance.now();
+    function step(now){
+      const t = Math.min(1, (now-t0)/1400);
+      camera.position.lerpVectors(startPos, targetPos, easeInOut(t));
+      if (t < 1) requestAnimationFrame(step); else res();
+    }
+    requestAnimationFrame(step);
+  });
+  await showModel('models/03_stomach_inside.glb', { scale:1.0 });
+  showCaption("Inside the Body", "Plastic and food waste tangle together inside the stomach — undigested, blocking nutrition, and slowly leaching toxins.");
+  await waitForContinue();
+  hideCaption();
+
+  // pull camera back out
+  await new Promise(res => {
+    const startPos = camera.position.clone();
+    const targetPos = new THREE.Vector3(0, 1.6, 4.2);
+    let t0 = performance.now();
+    function step(now){
+      const t = Math.min(1, (now-t0)/1200);
+      camera.position.lerpVectors(startPos, targetPos, easeInOut(t));
+      if (t < 1) requestAnimationFrame(step); else res();
+    }
+    requestAnimationFrame(step);
+  });
+
+  // CLIP 3: cow lying down, sick
+  await showModel('models/04_cow_sick.glb', { scale:0.9 });
+  showCaption("A Silent Suffering", "Weeks later, the cow is too weak to stand. It ate every day — but was never truly fed.");
+  await waitForContinue();
+  hideCaption();
+
+  showCaption("What Happens Next", "Without help, this ends the only way it can. This happens quietly, on streets, every single day — and it's preventable.");
+  await waitForContinue();
+  hideCaption();
+
+  // FINAL screen
+  document.getElementById('finalText').innerHTML =
+    "Before throwing food waste away, take it out of the plastic bag — or use paper/cloth instead.<br><br>" +
+    "A small habit, repeated by enough people, means fewer animals eating what should never be food.";
+  screenFinal.classList.remove('hidden');
+}
+
+document.getElementById('btnRestart').addEventListener('click', () => {
+  screenFinal.classList.add('hidden');
+  screenStart.classList.remove('hidden');
+  if (currentModel){ scene.remove(currentModel); currentModel = null; }
+  camera.position.set(0, 1.6, 4.2);
+  controls.target.set(0, 0.8, 0);
+});
+</script>
+</body>
+</html>
